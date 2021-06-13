@@ -1,111 +1,106 @@
 require 'spec_helper'
 
-describe Fifo do
-  let(:fifo_path) { 'spec/data/fifo' }
-  before(:each)   { delete_data_dir }
+RSpec.describe Fifo do
+  let(:fifo_dir) { Dir.mktmpdir }
+  let(:fifo_path) { File.join(fifo_dir, 'fifo_pipe') }
   after(:each)    { delete_data_dir }
 
   # Nukes the spec/data directory.
   def delete_data_dir
-    FileUtils.rm Dir['spec/data/*']
+    FileUtils.rm_rf fifo_dir
   end
 
-  # Get a random path for a test fifo. Pretty much guaranteed to be unique as it
-  # uses the time plus nanoseconds to name the file. Used because there were
-  # strange dependencies between tests that used the same fifo name, as you
-  # would sort of expect when file handles don't get closed for whatever reason.
-  # It was playing hell with the blocking tests.
-  def random_fifo_path
-    "spec/data/#{Time.now.to_f}"
-  end
+  context 'non-blocking' do
+    let!(:path) { fifo_path }
+    let(:writer)    { Fifo.new path, :w }
+    let(:reader)    { Fifo.new path, :r }
 
-  describe "Non Blocking" do
-    let(:writer)    { Fifo.new fifo_path, :w }
-    let(:reader)    { Fifo.new fifo_path, :r }
+    after { reader.close; writer.close }
 
-    after  { reader.close; writer.close }
-
-    it 'should be writable and readable' do
-      writer.puts "Hey!"
-      reader.gets.should == "Hey!\n"
+    it 'is writable and readable' do
+      writer.puts 'Hey!'
+      expect(reader.gets).to eq "Hey!\n"
     end
 
-    it 'should be writable and readable from another process' do
-      writer.puts "Hey!"
+    it 'is readable from another process' do
+      writer.puts 'Hey!'
 
       fork do
-        reader.gets.should == "Hey!\n"
+        expect(reader.gets).to eq "Hey!\n"
       end
 
       Process.wait
     end
 
-    it 'should be writable from another process and readable' do
+    it 'is writable from another process' do
       fork do
-        writer.puts "Hey!"
+        writer.puts 'Hey!'
       end
 
-      reader.gets.should == "Hey!\n"
+      expect(reader.gets).to eq "Hey!\n"
     end
 
-    it 'should be writable and readable multiple times' do
-      writer.puts "Test 1"
-      writer.puts "Test 2"
-      writer.puts "Test 3"
-      writer.puts "Test 4"
-      writer.puts "Test 5"
+    it 'is writable and readable multiple times' do
+      writer.puts 'Test 1'
+      writer.puts 'Test 2'
+      writer.puts 'Test 3'
+      writer.puts 'Test 4'
+      writer.puts 'Test 5'
 
-      reader.gets.should == "Test 1\n"
-      reader.gets.should == "Test 2\n"
-      reader.gets.should == "Test 3\n"
-      reader.gets.should == "Test 4\n"
-      reader.gets.should == "Test 5\n"
+      expect(reader.gets).to eq "Test 1\n"
+      expect(reader.gets).to eq "Test 2\n"
+      expect(reader.gets).to eq "Test 3\n"
+      expect(reader.gets).to eq "Test 4\n"
+      expect(reader.gets).to eq "Test 5\n"
     end
 
-    it 'should be possible to use readline in place of gets' do
-      writer.puts "Hey!"
-      reader.readline.should == "Hey!\n"
+    it 'is readable with #readline' do
+      writer.puts 'Hey!'
+      expect(reader.readline).to eq "Hey!\n"
     end
 
-    it 'should be possible to get characters one by one' do
-      writer.puts "12345"
-      reader.read(1).should == "1"
-      reader.read(1).should == "2"
-      reader.read(1).should == "3"
-      reader.read(1).should == "4"
-      reader.read(1).should == "5"
+    it 'gets characters one by one' do
+      writer.puts '12345'
+      expect(reader.read(1)).to eq '1'
+      expect(reader.read(1)).to eq '2'
+      expect(reader.read(1)).to eq '3'
+      expect(reader.read(1)).to eq '4'
+      expect(reader.read(1)).to eq '5'
     end
 
-    it 'should be possible to use getc in place of read(1)' do
-      writer.puts "12345"
-      reader.getc.should == "1"
-      reader.getc.should == "2"
-      reader.getc.should == "3"
-      reader.getc.should == "4"
-      reader.getc.should == "5"
+    describe '#getc' do
+      it 'reads one character with' do
+        writer.puts '12345'
+        expect(reader.getc).to eq '1'
+        expect(reader.getc).to eq '2'
+        expect(reader.getc).to eq '3'
+        expect(reader.getc).to eq '4'
+        expect(reader.getc).to eq '5'
+      end
     end
 
-    it 'should be possible to read multiple characters' do
-      writer.puts "12345"
-      reader.read(2).should == "12"
-      reader.read(3).should == "345"
+    describe '#read' do
+      it 'reads multiple characters' do
+        writer.puts '12345'
+        expect(reader.read(2)).to eq '12'
+        expect(reader.read(3)).to eq '345'
+      end
     end
 
-    it 'should fail if the given file permission is incorrect' do
-      lambda { Fifo.new(fifo_path, :incorrect_perm, :nowait) }.should raise_error
+    it 'fails if the given file permission is incorrect' do
+      expect { Fifo.new(fifo_path, :incorrect_perm, :nowait) }.to raise_error(RuntimeError, 'Unknown file permission. Must be either :r or :w.')
     end
 
-    it 'should fail if the given file mode is incorrect' do
-      lambda { Fifo.new(fifo_path, :r, :incorrect_mode) }.should raise_error
+    it 'fails if the given file mode is incorrect' do
+      expect { Fifo.new(fifo_path, :r, :incorrect_mode) }.to raise_error(RuntimeError, 'Unknown file mode. Must be either :wait or :nowait for blocking or non-blocking respectively.')
     end
   end
 
-  describe "Blocking" do
-    it 'should not block when both ends opened, read first' do
-      path = random_fifo_path
-
-      lambda do
-        timeout(0.5) do
+  describe 'Blocking' do
+    let!(:path) { fifo_path }
+    it 'does not block when both ends opened, read first' do
+      expect do
+        Timeout.timeout(0.5) do
           fork do
             r = Fifo.new path, :r, :wait
             r.close
@@ -118,14 +113,12 @@ describe Fifo do
 
           Process.wait
         end
-      end.should_not raise_error
+      end.not_to raise_error
     end
 
-    it 'should not block when both ends opened, write first' do
-      path = random_fifo_path
-
-      lambda do
-        timeout(0.5) do
+    it 'does not block when both ends opened, write first' do
+      expect do
+        Timeout.timeout(0.5) do
           fork do
             w = Fifo.new path, :w, :wait
             w.close
@@ -138,27 +131,25 @@ describe Fifo do
 
           Process.wait
         end
-      end.should_not raise_error
+      end.not_to raise_error
     end
 
-    it 'should block when only write end is open' do
-      lambda do
-        timeout(0.5) do
-          w = Fifo.new random_fifo_path, :w, :wait
+    it 'does block when only write end is open' do
+      expect do
+        Timeout.timeout(0.5) do
+          w = Fifo.new path, :w, :wait
           w.close
         end
-
-      end.should raise_error(Timeout::Error)
+      end.to raise_error(Timeout::Error)
     end
 
-    it 'should block when only read end is open' do
-      lambda do
-        timeout(0.5) do
-          r = Fifo.new random_fifo_path, :r, :wait
+    it 'does block when only read end is open' do
+      expect do
+        Timeout.timeout(0.5) do
+          r = Fifo.new path, :r, :wait
           r.close
         end
-
-      end.should raise_error(Timeout::Error)
+      end.to raise_error(Timeout::Error)
     end
   end
 end

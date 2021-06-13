@@ -16,29 +16,27 @@ class Fifo
   #   # Non blocking write Fifo
   #   w = Fifo.new('path/to/fifo', :w, :nowait)
   def initialize(file, perms = :r, mode = :nowait)
-    unless [:r, :w].include?(perms)
-      raise "Unknown file permission. Must be either :r or :w."
-    end
+    raise 'Unknown file permission. Must be either :r or :w.' unless [:r, :w].include?(perms)
 
     unless [:wait, :nowait].include?(mode)
-      raise "Unknown file mode. Must be either :wait or :nowait for blocking" +
-            " or non-blocking respectively."
+      raise 'Unknown file mode. Must be either :wait or :nowait for blocking' \
+            ' or non-blocking respectively.'
     end
 
-    if not $POSIX
+    if $POSIX
+      unless File.exist?(file)
+        File.mkfifo(file)
+        File.chmod(0o0666, file)
+      end
+
+      perms = perms.to_s + (mode == :wait ? '' : '+')
+      @pipe = File.open(file, perms)
+    else
       include Win32
 
       mode  = mode  == :wait ? Pipe::WAIT : Pipe::NOWAIT
       @pipe = perms == :r ? Pipe.new_server(file, mode) : Pipe.new_client(file)
       @pipe.connect if perms == :r
-    else
-      unless File.exists?(file)
-        File.mkfifo(file)
-        File.chmod(0666, file)
-      end
-
-      perms = perms.to_s + (mode == :wait ? '' : '+')
-      @pipe = File.open(file, perms)
     end
 
     def_delegators :@pipe, :read, :write, :close, :to_io, :flush
@@ -95,6 +93,8 @@ class Fifo
     end
   end
 
+  # Reads a single character
+  #
   # Alias for read(1).
   def getc
     self.read(1)
@@ -104,7 +104,7 @@ class Fifo
   # reading in each character. There is no functional difference between this
   # and gets.
   def readline
-    str = ""
+    str = ''
     while ($_ = self.read(1)) != "\n"
       str << $_
     end
@@ -124,8 +124,6 @@ class Fifo
   #   r.gets
   #   #=> "Hello, world!\n"
   def gets
-    str = ""
-    str << (r = self.read(1)) until r == "\n"
-    str
+    self.readline
   end
 end

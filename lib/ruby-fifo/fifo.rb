@@ -30,7 +30,7 @@ class Fifo
       end
 
       perms = perms.to_s + (mode == :wait ? '' : '+')
-      @pipe = File.open(file, perms)
+      @pipe = open_pipe(file, perms)
     else
       include Win32
 
@@ -125,5 +125,15 @@ class Fifo
   #   #=> "Hello, world!\n"
   def gets
     self.readline
+  end
+
+  private
+
+  def open_pipe(file, perms)
+    File.open(file, perms)
+  rescue Errno::EINTR
+    # We just want to open a file, so keep retrying.
+    # Inspired by golang's solution: https://github.com/golang/go/commit/50d0ee0c98ea21f818d2daa9bc21ef51861a2ef9
+    retry
   end
 end

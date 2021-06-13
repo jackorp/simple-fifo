@@ -7,9 +7,7 @@ if RUBY_PLATFORM =~ /mswin/
   require 'web32/pipe'
   $POSIX = false
 else
-  require 'mkfifo'
   $POSIX = true
 end
 
-require 'ruby-fifo/fifo'
-
+require 'simple-fifo/fifo'

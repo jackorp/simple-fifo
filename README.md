@@ -1,4 +1,4 @@
-# ruby-fifo [![Build Status](https://travis-ci.org/shurizzle/ruby-fifo.svg?branch=master)](https://travis-ci.org/shurizzle/ruby-fifo)
+Forked from ruby-fifo: https://github.com/shurizzle/ruby-fifo
 
 A small, simple library for using Fifos in Ruby. A Fifo is traditionally a Unix
 idea that lets processes communicate by writing to and reading from a special
@@ -7,9 +7,9 @@ kind of file in the filesystem. More information on fifos can be found here:
 
 # Installation
 
-To install ruby-fifo, execute the following command at your terminal:
+To install simple-fifo, execute the following command at your terminal:
 
-    $ gem install ruby-fifo
+    $ gem install simple-fifo
 
 Being sure not to include the dollar sign. The dollar sign is simply convention
 for denoting a terminal command.
